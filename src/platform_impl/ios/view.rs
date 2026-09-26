@@ -643,7 +643,11 @@ pub fn create_delegate_class() {
 
       // Dynamically set the delegate class name
       config.setDelegateClass(Some(super::scene::TaoSceneDelegate::class()));
-      Retained::as_ptr(&config) as _
+      // Hand the configuration to UIKit via autorelease: returning a raw
+      // pointer from `Retained::as_ptr` and dropping `config` frees the
+      // UISceneConfiguration before UIKit retains it (use-after-free that
+      // crashes release builds at launch). Backport of the fix in 0.37.0.
+      Retained::autorelease_ptr(config) as _
     }
   }
 

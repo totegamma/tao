@@ -539,7 +539,15 @@ pub unsafe fn connect_scene(scene: &UIScene, options: &UISceneConnectionOptions)
   // not call `scene:openURLContexts:` for them. Surface them as `Event::Opened`
   // like the warm-start path does. Dispatching here is safe: before the event
   // loop is running the event is queued and delivered after `Init`.
-  let urls = urls_from_contexts(&options.URLContexts());
+  //
+  // `URLContexts` is declared non-null in the SDK, but UIKit hands back nil
+  // when the scene was not connected through a URL (plain launch); objc2 would
+  // turn that into a panic, so fetch it as optional.
+  let url_contexts: Option<Retained<NSSet<UIOpenURLContext>>> = msg_send![options, URLContexts];
+  let urls = url_contexts
+    .as_deref()
+    .map(urls_from_contexts)
+    .unwrap_or_default();
   if !urls.is_empty() {
     handle_nonuser_event(EventWrapper::StaticEvent(Event::Opened { urls }));
   }

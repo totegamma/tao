@@ -14,7 +14,10 @@ use std::{
 };
 
 use objc2::{rc::Retained, runtime::AnyObject, MainThreadMarker, Message};
-use objc2_ui_kit::{UIApplication, UIScene, UISceneConnectionOptions, UIWindowScene};
+use objc2_foundation::NSSet;
+use objc2_ui_kit::{
+  UIApplication, UIOpenURLContext, UIScene, UISceneConnectionOptions, UIWindowScene,
+};
 
 use crate::{
   dpi::LogicalSize,
@@ -530,6 +533,37 @@ pub unsafe fn connect_scene(scene: &UIScene, options: &UISceneConnectionOptions)
       }));
     }
   }
+
+  // URLs that launched the app (cold start via a custom scheme / universal link)
+  // only arrive through the connection options of the first scene; UIKit does
+  // not call `scene:openURLContexts:` for them. Surface them as `Event::Opened`
+  // like the warm-start path does. Dispatching here is safe: before the event
+  // loop is running the event is queued and delivered after `Init`.
+  let urls = urls_from_contexts(&options.URLContexts());
+  if !urls.is_empty() {
+    handle_nonuser_event(EventWrapper::StaticEvent(Event::Opened { urls }));
+  }
+}
+
+pub(crate) fn urls_from_contexts(url_contexts: &NSSet<UIOpenURLContext>) -> Vec<url::Url> {
+  url_contexts
+    .iter()
+    .filter_map(|ctx| {
+      // SAFETY: plain getters on UIKit objects handed to us by UIKit on the
+      // main thread.
+      let url = unsafe { ctx.URL().absoluteString() };
+      url.and_then(|url| {
+        let url = url.to_string();
+        url
+          .parse()
+          .map_err(|e| {
+            log::error!("failed to parse URL {url} from UIOpenURLContext: {e}");
+            e
+          })
+          .ok()
+      })
+    })
+    .collect()
 }
 
 pub unsafe fn register_window_for_scene(window: id) {

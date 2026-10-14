@@ -125,21 +125,7 @@ define_class!(
     #[unsafe(method(scene:openURLContexts:))]
     fn scene_openURLContexts(&self, _scene: &UIScene, url_contexts: &NSSet<UIOpenURLContext>) {
       unsafe {
-        let urls: Vec<url::Url> = url_contexts
-          .iter()
-          .filter_map(|ctx| {
-            ctx.URL().absoluteString().and_then(|url| {
-              let url = url.to_string();
-              url
-                .parse()
-                .map_err(|e| {
-                  log::error!("failed to parse URL {url} from scene:openURLContexts: {e}");
-                  e
-                })
-                .ok()
-            })
-          })
-          .collect();
+        let urls = app_state::urls_from_contexts(url_contexts);
         if !urls.is_empty() {
           app_state::handle_nonuser_event(EventWrapper::StaticEvent(Event::Opened { urls }));
         }
